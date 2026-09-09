@@ -14,9 +14,12 @@ import {
   doc,
   updateDoc,
   deleteDoc,
+  query,
+  where,
 } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 
-import { db } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import TaskCard from '../components/TaskCard';
 
 export default function AddTaskScreen() {
@@ -26,8 +29,10 @@ export default function AddTaskScreen() {
   const [quote, setQuote] = useState("Loading today's motivation...");
 
   useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
     const unsubscribe = onSnapshot(
-      collection(db, 'tasks'),
+      query(collection(db, 'tasks'), where('ownerId', '==', user.uid)),
       (snapshot) => {
         const loadedTasks = snapshot.docs.map((docItem) => ({
           id: docItem.id,
@@ -37,6 +42,7 @@ export default function AddTaskScreen() {
       },
       (error) => {
         console.error('Firestore listener error:', error.message);
+        setErrorMessage(error.message);
       }
     );
 
@@ -63,9 +69,11 @@ export default function AddTaskScreen() {
     }
 
     try {
+      if (!auth.currentUser) return;
       await addDoc(collection(db, 'tasks'), {
         title: taskText,
         done: false,
+        ownerId: auth.currentUser.uid,
       });
       setTaskText('');
       setErrorMessage('');
@@ -75,15 +83,34 @@ export default function AddTaskScreen() {
   }
 
   async function handleToggleTask(id, currentDone) {
-    await updateDoc(doc(db, 'tasks', id), { done: !currentDone });
+    try {
+      await updateDoc(doc(db, 'tasks', id), { done: !currentDone });
+      setErrorMessage('');
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
   }
 
   async function handleDeleteTask(id) {
-    await deleteDoc(doc(db, 'tasks', id));
+    try {
+      await deleteDoc(doc(db, 'tasks', id));
+      setErrorMessage('');
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
   }
 
   return (
     <View style={styles.container}>
+      <Button title="Log Out" onPress={handleLogout} />
       <Text style={styles.quote}>💬 {quote}</Text>
 
       <View style={styles.quoteButton}>
